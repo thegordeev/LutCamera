@@ -13,6 +13,9 @@ struct CameraPreviewLayer: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: UIView, context: Context) {
+        if previewLayer.superlayer == nil {
+            uiView.layer.addSublayer(previewLayer)
+        }
         previewLayer.frame = uiView.bounds
     }
 }
