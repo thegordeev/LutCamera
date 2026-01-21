@@ -4,34 +4,15 @@ import UIKit
 /// Сервис для сохранения фотографий в галерею
 actor PhotoLibraryService {
     
-    // MARK: - Save Dual Capture
+    // MARK: - Save Image
     
-    func saveDualCapture(processedImage: UIImage?, processedData: Data?, rawData: Data?) async throws {
-        // Проверяем, есть ли что сохранять
-        guard processedImage != nil || processedData != nil else {
-            throw PhotoLibraryError.noDataToSave
-        }
-        
+    /// Максимально надежное сохранение изображения
+    func saveImage(_ image: UIImage) async throws {
         try await PHPhotoLibrary.shared().performChanges {
-            let creationRequest = PHAssetCreationRequest.forAsset()
-            
-            // ИСПРАВЛЕНИЕ ОШИБКИ 3300:
-            // Мы принудительно конвертируем UIImage в JPEG.
-            // Это гарантирует валидный формат файла, который Photos точно примет.
-            if let image = processedImage, let jpegData = image.jpegData(compressionQuality: 1.0) {
-                creationRequest.addResource(with: .photo, data: jpegData, options: nil)
-            }
-            else if let data = processedData {
-                // Если картинки нет, пробуем сохранить данные как есть (fallback)
-                creationRequest.addResource(with: .photo, data: data, options: nil)
-            }
-            
-            // Сохранение RAW (если нужно)
-            if let rawData = rawData {
-                let options = PHAssetResourceCreationOptions()
-                options.shouldMoveFile = true
-                creationRequest.addResource(with: .alternatePhoto, data: rawData, options: options)
-            }
+            // Используем системный метод создания ассета из картинки.
+            // iOS сама разберется с форматами и кодировкой.
+            // Это лечит ошибку 3300.
+            PHAssetChangeRequest.creationRequestForAsset(from: image)
         }
     }
     
@@ -68,15 +49,15 @@ actor PhotoLibraryService {
 // MARK: - Errors
 
 enum PhotoLibraryError: Error, LocalizedError {
-    case noDataToSave
     case saveFailed
+    case fetchFailed
     
     var errorDescription: String? {
         switch self {
-        case .noDataToSave:
-            return "Нет изображения для сохранения"
         case .saveFailed:
-            return "Не удалось сохранить фото в библиотеку"
+            return "Не удалось сохранить фото"
+        case .fetchFailed:
+            return "Не удалось загрузить фото"
         }
     }
 }

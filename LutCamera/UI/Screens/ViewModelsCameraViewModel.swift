@@ -2,79 +2,54 @@ import SwiftUI
 import AVFoundation
 import Observation
 
-/// ViewModel для управления камерой
 @MainActor
 @Observable
 class CameraViewModel {
-    
-    // MARK: - Services
     
     private let cameraService = CameraService()
     private let photoLibraryService = PhotoLibraryService()
     private let permissionsManager = PermissionsManager()
     
-    // MARK: - State
-    
     var currentZoomLevel: Double = 1.0 {
-        didSet {
-            cameraService.setZoom(CGFloat(currentZoomLevel))
-        }
+        didSet { cameraService.setZoom(CGFloat(currentZoomLevel)) }
     }
     
-    var isSessionRunning: Bool = false
+    var isSessionRunning = false
     var lastCapturedPhoto: PhotoCapture?
     
-    // UI State
-    var showError: Bool = false
-    var errorMessage: String = ""
-    var isCaptureInProgress: Bool = false
+    var showError = false
+    var errorMessage = ""
+    var isCaptureInProgress = false
     
-    // MARK: - Computed Properties
-    
-    var previewLayer: AVCaptureVideoPreviewLayer {
-        cameraService.previewLayer
-    }
-    
-    // MARK: - Lifecycle
+    var previewLayer: AVCaptureVideoPreviewLayer { cameraService.previewLayer }
     
     func onAppear() async {
         await requestPermissions()
-        await setupCamera()
+        
+        // Используем if/else вместо guard, чтобы избежать ошибки "fallthrough"
+        if permissionsManager.isCameraAuthorized {
+            do {
+                try await cameraService.setupSession()
+                cameraService.startSession()
+                isSessionRunning = true
+            } catch {
+                showError(message: "Ошибка камеры: \(error.localizedDescription)")
+            }
+        } else {
+            showError(message: "Нет доступа к камере")
+        }
     }
     
     func onDisappear() {
         cameraService.stopSession()
     }
     
-    // MARK: - Permissions
-    
     private func requestPermissions() async {
         let _ = await permissionsManager.requestCameraPermission()
         let _ = await permissionsManager.requestPhotoLibraryPermission()
     }
     
-    // MARK: - Camera Setup
-    
-    private func setupCamera() async {
-        if !permissionsManager.isCameraAuthorized {
-            showError(message: "Нет доступа к камере. Пожалуйста, разрешите доступ в Настройках.")
-            return
-        }
-        
-        do {
-            try await cameraService.setupSession()
-            cameraService.startSession()
-            isSessionRunning = true
-        } catch {
-            showError(message: "Ошибка настройки камеры: \(error.localizedDescription)")
-        }
-    }
-    
-    // MARK: - Controls
-    
-    func setZoom(_ level: Double) {
-        currentZoomLevel = level
-    }
+    func setZoom(_ level: Double) { currentZoomLevel = level }
     
     func switchCamera() {
         Task {
@@ -86,13 +61,10 @@ class CameraViewModel {
         }
     }
     
-    // MARK: - Photo Capture
-    
     func capturePhoto() {
         guard !isCaptureInProgress else { return }
         isCaptureInProgress = true
         
-        // Виброотклик
         let generator = UIImpactFeedbackGenerator(style: .medium)
         generator.impactOccurred()
         
@@ -101,42 +73,31 @@ class CameraViewModel {
                 guard let self = self else { return }
                 self.isCaptureInProgress = false
                 
-                guard let photo = photo else {
-                    self.showError(message: "Ошибка: камера вернула пустой снимок")
-                    return
+                guard let photo = photo, let image = photo.processedImage else {
+                    self.showError(message: "Ошибка: пустое фото")
+                    return // Здесь return обязателен для guard
                 }
                 
-                // 1. Показываем превью
                 self.lastCapturedPhoto = photo
-                
-                // 2. Сохраняем
-                await self.savePhotoToLibrary(photo)
+                await self.saveToLibrary(image)
             }
         }
     }
     
-    // MARK: - Save to Library
-    
-    private func savePhotoToLibrary(_ photo: PhotoCapture) async {
-        // ИСПРАВЛЕНИЕ: Используем if вместо guard
+    private func saveToLibrary(_ image: UIImage) async {
+        // Проверка прав через if
         if !permissionsManager.isPhotoLibraryAuthorized {
             let granted = await permissionsManager.requestPhotoLibraryPermission()
             if !granted {
-                showError(message: "Нет доступа к галерее. Фото не сохранено!")
+                showError(message: "Нет прав на галерею")
                 return
             }
         }
         
-        // Если дошли сюда — права есть
         do {
-            try await photoLibraryService.saveDualCapture(
-                processedImage: photo.processedImage,
-                processedData: photo.processedData,
-                rawData: photo.rawData
-            )
-            print("✅ Фото успешно сохранено")
+            try await photoLibraryService.saveImage(image)
+            print("✅ Сохранено!")
         } catch {
-            print("❌ Ошибка сохранения: \(error.localizedDescription)")
             showError(message: "Ошибка сохранения: \(error.localizedDescription)")
         }
     }
@@ -144,8 +105,6 @@ class CameraViewModel {
     func fetchLastPhoto() async -> UIImage? {
         await photoLibraryService.fetchLastPhoto()
     }
-    
-    // MARK: - Helpers
     
     private func showError(message: String) {
         self.errorMessage = message
