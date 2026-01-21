@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct GalleryButton: View {
     let lastPhoto: UIImage?
