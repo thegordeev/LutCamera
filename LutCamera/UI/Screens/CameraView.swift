@@ -29,13 +29,23 @@ struct CameraView: View {
                     onCapture: viewModel.capturePhoto,
                     onFlipCamera: viewModel.switchCamera,
                     onGallery: {
-                        print("Open gallery")
+                        // Логика открытия галереи (пока заглушка)
+                        if let url = URL(string: "photos-redirect://") {
+                            UIApplication.shared.open(url)
+                        }
                     }
                 )
             }
             .background(Color.black)
             .edgesIgnoringSafeArea(.all)
         }
+        // 👇 ДОБАВЛЕНО: Отображение ошибок
+        .alert("Ошибка", isPresented: $viewModel.showError) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(viewModel.errorMessage)
+        }
+        // 👆 КОНЕЦ ДОБАВЛЕНИЯ
         .task {
             await viewModel.onAppear()
             lastPhoto = await viewModel.fetchLastPhoto()
@@ -44,7 +54,12 @@ struct CameraView: View {
             viewModel.onDisappear()
         }
         .onChange(of: viewModel.lastCapturedPhoto?.id) { _, _ in
-            lastPhoto = viewModel.lastCapturedPhoto?.processedImage
+            if let newImage = viewModel.lastCapturedPhoto?.processedImage {
+                // Анимация обновления миниатюры
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    lastPhoto = newImage
+                }
+            }
         }
     }
 }

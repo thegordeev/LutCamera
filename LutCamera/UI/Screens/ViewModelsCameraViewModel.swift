@@ -23,7 +23,10 @@ class CameraViewModel {
     
     var isSessionRunning: Bool = false
     var lastCapturedPhoto: PhotoCapture?
-    var errorMessage: String?
+    
+    // UI State
+    var showError: Bool = false
+    var errorMessage: String = ""
     var isCaptureInProgress: Bool = false
     
     // MARK: - Computed Properties
@@ -32,21 +35,10 @@ class CameraViewModel {
         cameraService.previewLayer
     }
     
-    var isCameraAuthorized: Bool {
-        permissionsManager.isCameraAuthorized
-    }
-    
-    var isPhotoLibraryAuthorized: Bool {
-        permissionsManager.isPhotoLibraryAuthorized
-    }
-    
     // MARK: - Lifecycle
     
     func onAppear() async {
-        // Запросить разрешения
         await requestPermissions()
-        
-        // Настроить и запустить камеру
         await setupCamera()
     }
     
@@ -57,28 +49,15 @@ class CameraViewModel {
     // MARK: - Permissions
     
     private func requestPermissions() async {
-        print("🔐 Requesting permissions...")
-        
-        let cameraGranted = await permissionsManager.requestCameraPermission()
-        print("   Camera permission: \(cameraGranted ? "✅ Granted" : "❌ Denied")")
-        
-        let photoLibraryGranted = await permissionsManager.requestPhotoLibraryPermission()
-        print("   Photo library permission: \(photoLibraryGranted ? "✅ Granted" : "❌ Denied")")
-        
-        if !cameraGranted {
-            errorMessage = "Camera access is required"
-        }
-        
-        if !photoLibraryGranted {
-            errorMessage = "Photo library access is required"
-        }
+        let _ = await permissionsManager.requestCameraPermission()
+        let _ = await permissionsManager.requestPhotoLibraryPermission()
     }
     
     // MARK: - Camera Setup
     
     private func setupCamera() async {
-        guard isCameraAuthorized else {
-            errorMessage = "Camera permission not granted"
+        if !permissionsManager.isCameraAuthorized {
+            showError(message: "Нет доступа к камере. Пожалуйста, разрешите доступ в Настройках.")
             return
         }
         
@@ -87,11 +66,11 @@ class CameraViewModel {
             cameraService.startSession()
             isSessionRunning = true
         } catch {
-            errorMessage = "Failed to setup camera: \(error.localizedDescription)"
+            showError(message: "Ошибка настройки камеры: \(error.localizedDescription)")
         }
     }
     
-    // MARK: - Camera Controls
+    // MARK: - Controls
     
     func setZoom(_ level: Double) {
         currentZoomLevel = level
@@ -102,7 +81,7 @@ class CameraViewModel {
             do {
                 try await cameraService.switchCamera()
             } catch {
-                errorMessage = "Failed to switch camera: \(error.localizedDescription)"
+                showError(message: "Не удалось переключить камеру")
             }
         }
     }
@@ -110,32 +89,27 @@ class CameraViewModel {
     // MARK: - Photo Capture
     
     func capturePhoto() {
-        print("🔘 CameraViewModel: Capture button pressed")
-        
-        guard !isCaptureInProgress else {
-            print("⏸️ Capture already in progress")
-            return
-        }
-        
+        guard !isCaptureInProgress else { return }
         isCaptureInProgress = true
-        print("✅ Starting capture process...")
+        
+        // Виброотклик
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
         
         cameraService.capturePhoto { [weak self] photo in
             Task { @MainActor in
                 guard let self = self else { return }
-                
                 self.isCaptureInProgress = false
                 
                 guard let photo = photo else {
-                    print("❌ Photo capture failed")
-                    self.errorMessage = "Failed to capture photo"
+                    self.showError(message: "Ошибка: камера вернула пустой снимок")
                     return
                 }
                 
-                print("✅ Photo captured successfully in ViewModel")
+                // 1. Показываем превью
                 self.lastCapturedPhoto = photo
                 
-                // Сохранить в галерею
+                // 2. Сохраняем
                 await self.savePhotoToLibrary(photo)
             }
         }
@@ -144,46 +118,37 @@ class CameraViewModel {
     // MARK: - Save to Library
     
     private func savePhotoToLibrary(_ photo: PhotoCapture) async {
-        print("💾 Attempting to save photo to library...")
-        print("   Photo library authorized: \(isPhotoLibraryAuthorized)")
-        print("   Has processed image: \(photo.processedImage != nil)")
-        print("   Has RAW data: \(photo.rawData != nil)")
-        
-        // Проверить разрешение
-        if !isPhotoLibraryAuthorized {
-            print("❌ Photo library permission not granted")
-            errorMessage = "Photo library permission not granted"
-            
-            // Попробуем запросить разрешение снова
+        // ИСПРАВЛЕНИЕ: Используем if вместо guard
+        if !permissionsManager.isPhotoLibraryAuthorized {
             let granted = await permissionsManager.requestPhotoLibraryPermission()
             if !granted {
+                showError(message: "Нет доступа к галерее. Фото не сохранено!")
                 return
             }
-            print("✅ Permission granted after request")
         }
         
+        // Если дошли сюда — права есть
         do {
-            // Сохранить дуал-захват (обработанное + RAW если есть)
             try await photoLibraryService.saveDualCapture(
                 processedImage: photo.processedImage,
                 processedData: photo.processedData,
                 rawData: photo.rawData
             )
-            
-            print("✅ Photo saved to library successfully!")
-            
-            // Небольшая задержка для обновления галереи
-            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 секунды
-            
+            print("✅ Фото успешно сохранено")
         } catch {
-            print("❌ Failed to save photo: \(error.localizedDescription)")
-            errorMessage = "Failed to save photo: \(error.localizedDescription)"
+            print("❌ Ошибка сохранения: \(error.localizedDescription)")
+            showError(message: "Ошибка сохранения: \(error.localizedDescription)")
         }
     }
     
-    // MARK: - Fetch Last Photo
-    
     func fetchLastPhoto() async -> UIImage? {
         await photoLibraryService.fetchLastPhoto()
+    }
+    
+    // MARK: - Helpers
+    
+    private func showError(message: String) {
+        self.errorMessage = message
+        self.showError = true
     }
 }
