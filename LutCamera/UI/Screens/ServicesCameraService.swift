@@ -18,6 +18,11 @@ class CameraService: NSObject, ObservableObject {
     private var videoDeviceInput: AVCaptureDeviceInput?
     private let photoOutput = AVCapturePhotoOutput()
     private var currentCamera: AVCaptureDevice?
+    private lazy var previewLayerInstance: AVCaptureVideoPreviewLayer = {
+        let layer = AVCaptureVideoPreviewLayer(session: captureSession)
+        layer.videoGravity = .resizeAspectFill
+        return layer
+    }()
     
     // Делегат для обработки захвата фото
     private var photoCaptureDelegate: PhotoCaptureDelegate?
@@ -25,9 +30,7 @@ class CameraService: NSObject, ObservableObject {
     // MARK: - Public Properties
     
     var previewLayer: AVCaptureVideoPreviewLayer {
-        let layer = AVCaptureVideoPreviewLayer(session: captureSession)
-        layer.videoGravity = .resizeAspectFill
-        return layer
+        previewLayerInstance
     }
     
     // MARK: - Setup
