@@ -1,18 +1,16 @@
 import Photos
 import UIKit
 
-/// Сервис для сохранения фотографий в галерею
 actor PhotoLibraryService {
     
-    // MARK: - Save Image
+    // MARK: - Save High Quality Data
     
-    /// Максимально надежное сохранение изображения
-    func saveImage(_ image: UIImage) async throws {
+    func saveOriginalData(_ data: Data) async throws {
         try await PHPhotoLibrary.shared().performChanges {
-            // Используем системный метод создания ассета из картинки.
-            // iOS сама разберется с форматами и кодировкой.
-            // Это лечит ошибку 3300.
-            PHAssetChangeRequest.creationRequestForAsset(from: image)
+            let request = PHAssetCreationRequest.forAsset()
+            // Сохраняем оригинальный файл байт-в-байт.
+            // .photo говорит системе, что это стандартное фото (HEIC/JPEG)
+            request.addResource(with: .photo, data: data, options: nil)
         }
     }
     
@@ -42,22 +40,6 @@ actor PhotoLibraryService {
             ) { image, _ in
                 continuation.resume(returning: image)
             }
-        }
-    }
-}
-
-// MARK: - Errors
-
-enum PhotoLibraryError: Error, LocalizedError {
-    case saveFailed
-    case fetchFailed
-    
-    var errorDescription: String? {
-        switch self {
-        case .saveFailed:
-            return "Не удалось сохранить фото"
-        case .fetchFailed:
-            return "Не удалось загрузить фото"
         }
     }
 }

@@ -26,7 +26,6 @@ class CameraViewModel {
     func onAppear() async {
         await requestPermissions()
         
-        // Используем if/else вместо guard, чтобы избежать ошибки "fallthrough"
         if permissionsManager.isCameraAuthorized {
             do {
                 try await cameraService.setupSession()
@@ -73,19 +72,21 @@ class CameraViewModel {
                 guard let self = self else { return }
                 self.isCaptureInProgress = false
                 
-                guard let photo = photo, let image = photo.processedImage else {
-                    self.showError(message: "Ошибка: пустое фото")
-                    return // Здесь return обязателен для guard
+                // Проверяем наличие ДАННЫХ, а не просто картинки
+                guard let photo = photo, let data = photo.processedData else {
+                    self.showError(message: "Ошибка: нет данных фото")
+                    return
                 }
                 
                 self.lastCapturedPhoto = photo
-                await self.saveToLibrary(image)
+                
+                // Сохраняем оригинальные данные
+                await self.saveToLibrary(data)
             }
         }
     }
     
-    private func saveToLibrary(_ image: UIImage) async {
-        // Проверка прав через if
+    private func saveToLibrary(_ data: Data) async {
         if !permissionsManager.isPhotoLibraryAuthorized {
             let granted = await permissionsManager.requestPhotoLibraryPermission()
             if !granted {
@@ -95,8 +96,8 @@ class CameraViewModel {
         }
         
         do {
-            try await photoLibraryService.saveImage(image)
-            print("✅ Сохранено!")
+            try await photoLibraryService.saveOriginalData(data)
+            print("✅ Сохранено в высоком качестве!")
         } catch {
             showError(message: "Ошибка сохранения: \(error.localizedDescription)")
         }

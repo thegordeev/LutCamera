@@ -28,12 +28,22 @@ class CameraService: NSObject, ObservableObject {
     
     func setupSession() async throws {
         captureSession.beginConfiguration()
-        captureSession.sessionPreset = .photo
+        captureSession.sessionPreset = .photo // Важно для качества
         
         guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
             throw CameraError.noCameraAvailable
         }
         currentCamera = camera
+        
+        // Настройка автофокуса и экспозиции
+        try? camera.lockForConfiguration()
+        if camera.isFocusModeSupported(.continuousAutoFocus) {
+            camera.focusMode = .continuousAutoFocus
+        }
+        if camera.isExposureModeSupported(.continuousAutoExposure) {
+            camera.exposureMode = .continuousAutoExposure
+        }
+        camera.unlockForConfiguration()
         
         let input = try AVCaptureDeviceInput(device: camera)
         guard captureSession.canAddInput(input) else { throw CameraError.cannotAddInput }
@@ -42,7 +52,9 @@ class CameraService: NSObject, ObservableObject {
         
         guard captureSession.canAddOutput(photoOutput) else { throw CameraError.cannotAddOutput }
         captureSession.addOutput(photoOutput)
-        photoOutput.maxPhotoQualityPrioritization = .balanced
+        
+        // Максимальное качество
+        photoOutput.maxPhotoQualityPrioritization = .quality
         
         captureSession.commitConfiguration()
     }
@@ -95,6 +107,7 @@ class CameraService: NSObject, ObservableObject {
     func capturePhoto(completion: @escaping (PhotoCapture?) -> Void) {
         let settings = AVCapturePhotoSettings()
         settings.flashMode = .auto
+        settings.photoQualityPrioritization = .quality // Включаем алгоритмы Apple
         
         let delegate = PhotoCaptureDelegate(completion: completion)
         self.photoCaptureDelegate = delegate
@@ -121,27 +134,19 @@ private class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
             return
         }
         
-        guard let data = photo.fileDataRepresentation(),
-              let image = UIImage(data: data) else {
+        // САМОЕ ГЛАВНОЕ: Берем оригинальные данные, а не UIImage.
+        // В этих данных лежат EXIF, GPS (если разрешено), Smart HDR и т.д.
+        guard let data = photo.fileDataRepresentation() else {
             completion(nil)
             return
         }
         
-        let fixedImage = fixOrientation(img: image)
-        completion(PhotoCapture(processedImage: fixedImage, processedData: nil, rawData: nil))
-    }
-    
-    func fixOrientation(img: UIImage) -> UIImage {
-        if img.imageOrientation == .up { return img }
-        UIGraphicsBeginImageContextWithOptions(img.size, false, img.scale)
-        img.draw(in: CGRect(origin: .zero, size: img.size))
-        let normalizedImage = UIGraphicsGetImageFromCurrentImageContext()
-        UIGraphicsEndImageContext()
-        return normalizedImage ?? img
+        // Создаем UIImage только для превью в приложении
+        let image = UIImage(data: data)
+        
+        completion(PhotoCapture(processedImage: image, processedData: data, rawData: nil))
     }
 }
-
-// MARK: - Errors (ВОТ ЧТО БЫЛО ПРОПУЩЕНО)
 
 enum CameraError: Error {
     case noCameraAvailable
