@@ -8,47 +8,40 @@ actor PhotoLibraryService {
     
     /// Сохранить изображение в галерею
     func saveImage(_ image: UIImage) async throws {
+        guard let imageData = image.pngData() else {
+            throw PhotoLibraryError.noDataToSave
+        }
+        
         try await PHPhotoLibrary.shared().performChanges {
-            PHAssetChangeRequest.creationRequestForAsset(from: image)
+            let creationRequest = PHAssetCreationRequest.forAsset()
+            creationRequest.addResource(with: .photo, data: imageData, options: nil)
         }
     }
     
     // MARK: - Save Dual Capture (Processed + RAW)
     
     /// Сохранить дуал-захват (обработанное фото + RAW)
-    func saveDualCapture(processedImage: UIImage?, rawData: Data?) async throws {
-        print("📚 PhotoLibraryService: Starting save...")
-        print("   Processed image: \(processedImage != nil)")
-        print("   RAW data: \(rawData != nil)")
-        
-        guard processedImage != nil || rawData != nil else {
-            print("❌ No data to save")
+    func saveDualCapture(processedImage: UIImage?, processedData: Data?, rawData: Data?) async throws {
+        guard processedImage != nil || processedData != nil || rawData != nil else {
             throw PhotoLibraryError.noDataToSave
         }
         
-        do {
-            try await PHPhotoLibrary.shared().performChanges {
-                // Сохранить обработанное изображение
-                if let processedImage = processedImage {
-                    print("   Saving processed image...")
-                    PHAssetChangeRequest.creationRequestForAsset(from: processedImage)
-                }
-                
-                // Сохранить RAW данные (если доступны)
-                if let rawData = rawData {
-                    print("   Saving RAW data (\(rawData.count) bytes)...")
-                    let creationRequest = PHAssetCreationRequest.forAsset()
-                    creationRequest.addResource(
-                        with: .photo,
-                        data: rawData,
-                        options: nil
-                    )
-                }
+        try await PHPhotoLibrary.shared().performChanges {
+            let creationRequest = PHAssetCreationRequest.forAsset()
+            var hasPrimary = false
+            
+            if let processedData = processedData {
+                creationRequest.addResource(with: .photo, data: processedData, options: nil)
+                hasPrimary = true
+            } else if let processedImage = processedImage, let data = processedImage.pngData() {
+                creationRequest.addResource(with: .photo, data: data, options: nil)
+                hasPrimary = true
             }
-            print("✅ PhotoLibraryService: Save completed successfully")
-        } catch {
-            print("❌ PhotoLibraryService: Save failed - \(error)")
-            throw error
+            
+            if let rawData = rawData {
+                let resourceType: PHAssetResourceType = hasPrimary ? .alternatePhoto : .photo
+                creationRequest.addResource(with: resourceType, data: rawData, options: nil)
+            }
         }
     }
     
