@@ -1,16 +1,19 @@
 import SwiftUI
+import UIKit
 
 struct BottomControlPanel: View {
+    let lastPhoto: UIImage?
     let onCapture: () -> Void
     let onFlipCamera: () -> Void
+    let onGallery: () -> Void
     
     var body: some View {
         ZStack {
             Color.black
             
             HStack {
-                // Gallery (Left)
-                GalleryButton()
+                // Gallery (Left) - показывает последнее фото
+                GalleryButton(lastPhoto: lastPhoto, action: onGallery)
                 
                 Spacer()
                 
@@ -30,7 +33,9 @@ struct BottomControlPanel: View {
 
 #Preview {
     BottomControlPanel(
+        lastPhoto: nil,
         onCapture: { print("Capture") },
-        onFlipCamera: { print("Flip camera") }
+        onFlipCamera: { print("Flip camera") },
+        onGallery: { print("Open gallery") }
     )
 }
