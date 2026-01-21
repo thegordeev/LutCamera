@@ -140,6 +140,7 @@ class CameraViewModel {
             // Сохранить дуал-захват (обработанное + RAW если есть)
             try await photoLibraryService.saveDualCapture(
                 processedImage: photo.processedImage,
+                processedData: photo.processedData,
                 rawData: photo.rawData
             )
             
