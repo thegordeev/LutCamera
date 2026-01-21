@@ -65,11 +65,8 @@ class CameraService: NSObject, ObservableObject {
             photoOutput.maxPhotoQualityPrioritization = .quality
 
             if #available(iOS 16.0, *) {
-                if let maxDimensions = photoOutput.supportedPhotoDimensions.max(by: { lhs, rhs in
-                    lhs.width * lhs.height < rhs.width * rhs.height
-                }) {
-                    photoOutput.maxPhotoDimensions = maxDimensions
-                }
+                // maxPhotoDimensions will use the highest resolution by default
+                // No need to explicitly set it unless you want to limit resolution
             }
             
             // Включить ProRAW если доступно
@@ -166,9 +163,11 @@ class CameraService: NSObject, ObservableObject {
         let settings: AVCapturePhotoSettings
         
         // Включить ProRAW если доступно
-        if photoOutput.availableRawPhotoPixelFormatTypes.count > 0,
-           photoOutput.isAppleProRAWEnabled,
-           let rawFormat = photoOutput.availableRawPhotoPixelFormatTypes.first {
+        let hasRawFormats = !photoOutput.availableRawPhotoPixelFormatTypes.isEmpty
+        let isProRAWEnabled = photoOutput.isAppleProRAWEnabled
+        let rawFormat = photoOutput.availableRawPhotoPixelFormatTypes.first
+        
+        if hasRawFormats, isProRAWEnabled, let rawFormat = rawFormat {
             // Создать настройки с RAW форматом
             settings = AVCapturePhotoSettings(
                 rawPixelFormatType: rawFormat,
