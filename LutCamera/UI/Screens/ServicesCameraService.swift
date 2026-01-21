@@ -61,8 +61,16 @@ class CameraService: NSObject, ObservableObject {
         if captureSession.canAddOutput(photoOutput) {
             captureSession.addOutput(photoOutput)
             
-            // Настройка photo output
+            // Настройка максимального качества
             photoOutput.maxPhotoQualityPrioritization = .quality
+            
+            // Включить высокое разрешение (48MP на поддерживаемых устройствах)
+            photoOutput.isHighResolutionCaptureEnabled = true
+            
+            // Включить захват в максимальном разрешении (для 48MP сенсора)
+            if #available(iOS 16.0, *) {
+                photoOutput.maxPhotoDimensions = camera.activeFormat.supportedMaxPhotoDimensions.last ?? camera.activeFormat.supportedMaxPhotoDimensions.first!
+            }
             
             // Включить ProRAW если доступно
             if photoOutput.availableRawPhotoPixelFormatTypes.count > 0 {
@@ -160,6 +168,16 @@ class CameraService: NSObject, ObservableObject {
     // MARK: - Photo Capture
     
     func capturePhoto(completion: @escaping (PhotoCapture?) -> Void) {
+        print("📷 Starting photo capture...")
+        print("   Session running: \(captureSession.isRunning)")
+        print("   Photo output connected: \(photoOutput.connections.count > 0)")
+        
+        guard captureSession.isRunning else {
+            print("❌ Capture session is not running!")
+            completion(nil)
+            return
+        }
+        
         // Настройка параметров захвата
         let settings: AVCapturePhotoSettings
         
@@ -167,15 +185,34 @@ class CameraService: NSObject, ObservableObject {
         if photoOutput.availableRawPhotoPixelFormatTypes.count > 0,
            photoOutput.isAppleProRAWEnabled,
            let rawFormat = photoOutput.availableRawPhotoPixelFormatTypes.first {
-            // Создать настройки с RAW форматом
+            // Создать настройки с RAW форматом (ProRAW)
             settings = AVCapturePhotoSettings(rawPixelFormatType: rawFormat)
+            print("   Using ProRAW format")
         } else {
-            // Создать обычные настройки
+            // Создать обычные настройки с максимальным качеством
             settings = AVCapturePhotoSettings()
+            print("   Using standard format")
         }
         
-        // Установить качество
+        // Установить максимальное качество
         settings.photoQualityPrioritization = .quality
+        
+        // Включить высокое разрешение (48MP на поддерживаемых устройствах)
+        settings.isHighResolutionPhotoEnabled = true
+        print("   High resolution enabled: \(settings.isHighResolutionPhotoEnabled)")
+        
+        // Включить максимальное разрешение для iOS 16+
+        if #available(iOS 16.0, *) {
+            if let maxDimensions = currentCamera?.activeFormat.supportedMaxPhotoDimensions.last {
+                settings.maxPhotoDimensions = maxDimensions
+                print("   Max dimensions: \(maxDimensions.width)x\(maxDimensions.height)")
+            }
+        }
+        
+        // Отключить обработку для максимального качества (если не нужны быстрые превью)
+        if #available(iOS 17.0, *) {
+            settings.isAutoContentAwareDistortionCorrectionEnabled = false
+        }
         
         // Создать делегата для обработки
         let delegate = PhotoCaptureDelegate { [weak self] photo in
@@ -186,6 +223,7 @@ class CameraService: NSObject, ObservableObject {
         photoCaptureDelegate = delegate
         
         // Захватить фото
+        print("   Capturing photo with settings...")
         photoOutput.capturePhoto(with: settings, delegate: delegate)
     }
 }
@@ -206,20 +244,28 @@ private class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
         error: Error?
     ) {
         if let error = error {
-            print("Error capturing photo: \(error)")
+            print("❌ Error capturing photo: \(error)")
             completion(nil)
             return
         }
+        
+        print("📸 Photo captured successfully")
+        print("   Resolution: \(photo.resolvedSettings.photoDimensions.width)x\(photo.resolvedSettings.photoDimensions.height)")
+        print("   Is RAW: \(photo.isRawPhoto)")
+        print("   Pixel Format: \(photo.pixelBuffer != nil ? "Available" : "Not available")")
         
         // Получить обработанное изображение
         guard let imageData = photo.fileDataRepresentation(),
               let image = UIImage(data: imageData) else {
+            print("❌ Failed to get image data")
             completion(nil)
             return
         }
         
+        print("✅ Image created: \(image.size.width)x\(image.size.height)")
+        
         // Получить RAW данные если доступны
-        let rawData = photo.fileDataRepresentation()
+        let rawData = photo.isRawPhoto ? photo.fileDataRepresentation() : nil
         
         // Создать модель захвата
         let photoCapture = PhotoCapture(

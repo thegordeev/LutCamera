@@ -57,8 +57,13 @@ class CameraViewModel {
     // MARK: - Permissions
     
     private func requestPermissions() async {
+        print("🔐 Requesting permissions...")
+        
         let cameraGranted = await permissionsManager.requestCameraPermission()
+        print("   Camera permission: \(cameraGranted ? "✅ Granted" : "❌ Denied")")
+        
         let photoLibraryGranted = await permissionsManager.requestPhotoLibraryPermission()
+        print("   Photo library permission: \(photoLibraryGranted ? "✅ Granted" : "❌ Denied")")
         
         if !cameraGranted {
             errorMessage = "Camera access is required"
@@ -105,9 +110,15 @@ class CameraViewModel {
     // MARK: - Photo Capture
     
     func capturePhoto() {
-        guard !isCaptureInProgress else { return }
+        print("🔘 CameraViewModel: Capture button pressed")
+        
+        guard !isCaptureInProgress else {
+            print("⏸️ Capture already in progress")
+            return
+        }
         
         isCaptureInProgress = true
+        print("✅ Starting capture process...")
         
         cameraService.capturePhoto { [weak self] photo in
             Task { @MainActor in
@@ -116,10 +127,12 @@ class CameraViewModel {
                 self.isCaptureInProgress = false
                 
                 guard let photo = photo else {
+                    print("❌ Photo capture failed")
                     self.errorMessage = "Failed to capture photo"
                     return
                 }
                 
+                print("✅ Photo captured successfully in ViewModel")
                 self.lastCapturedPhoto = photo
                 
                 // Сохранить в галерею
@@ -131,9 +144,22 @@ class CameraViewModel {
     // MARK: - Save to Library
     
     private func savePhotoToLibrary(_ photo: PhotoCapture) async {
-        guard isPhotoLibraryAuthorized else {
+        print("💾 Attempting to save photo to library...")
+        print("   Photo library authorized: \(isPhotoLibraryAuthorized)")
+        print("   Has processed image: \(photo.processedImage != nil)")
+        print("   Has RAW data: \(photo.rawData != nil)")
+        
+        // Проверить разрешение
+        if !isPhotoLibraryAuthorized {
+            print("❌ Photo library permission not granted")
             errorMessage = "Photo library permission not granted"
-            return
+            
+            // Попробуем запросить разрешение снова
+            let granted = await permissionsManager.requestPhotoLibraryPermission()
+            if !granted {
+                return
+            }
+            print("✅ Permission granted after request")
         }
         
         do {
@@ -143,8 +169,13 @@ class CameraViewModel {
                 rawData: photo.rawData
             )
             
-            print("✅ Photo saved to library")
+            print("✅ Photo saved to library successfully!")
+            
+            // Небольшая задержка для обновления галереи
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 секунды
+            
         } catch {
+            print("❌ Failed to save photo: \(error.localizedDescription)")
             errorMessage = "Failed to save photo: \(error.localizedDescription)"
         }
     }

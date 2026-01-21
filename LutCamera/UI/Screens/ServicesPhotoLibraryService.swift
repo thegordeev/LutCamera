@@ -17,25 +17,38 @@ actor PhotoLibraryService {
     
     /// Сохранить дуал-захват (обработанное фото + RAW)
     func saveDualCapture(processedImage: UIImage?, rawData: Data?) async throws {
+        print("📚 PhotoLibraryService: Starting save...")
+        print("   Processed image: \(processedImage != nil)")
+        print("   RAW data: \(rawData != nil)")
+        
         guard processedImage != nil || rawData != nil else {
+            print("❌ No data to save")
             throw PhotoLibraryError.noDataToSave
         }
         
-        try await PHPhotoLibrary.shared().performChanges {
-            // Сохранить обработанное изображение
-            if let processedImage = processedImage {
-                PHAssetChangeRequest.creationRequestForAsset(from: processedImage)
+        do {
+            try await PHPhotoLibrary.shared().performChanges {
+                // Сохранить обработанное изображение
+                if let processedImage = processedImage {
+                    print("   Saving processed image...")
+                    PHAssetChangeRequest.creationRequestForAsset(from: processedImage)
+                }
+                
+                // Сохранить RAW данные (если доступны)
+                if let rawData = rawData {
+                    print("   Saving RAW data (\(rawData.count) bytes)...")
+                    let creationRequest = PHAssetCreationRequest.forAsset()
+                    creationRequest.addResource(
+                        with: .photo,
+                        data: rawData,
+                        options: nil
+                    )
+                }
             }
-            
-            // Сохранить RAW данные (если доступны)
-            if let rawData = rawData {
-                let creationRequest = PHAssetCreationRequest.forAsset()
-                creationRequest.addResource(
-                    with: .photo,
-                    data: rawData,
-                    options: nil
-                )
-            }
+            print("✅ PhotoLibraryService: Save completed successfully")
+        } catch {
+            print("❌ PhotoLibraryService: Save failed - \(error)")
+            throw error
         }
     }
     
