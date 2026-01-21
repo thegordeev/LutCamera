@@ -8,33 +8,39 @@ actor PhotoLibraryService {
     
     /// Сохранить изображение в галерею
     func saveImage(_ image: UIImage) async throws {
+        guard let imageData = image.pngData() else {
+            throw PhotoLibraryError.noDataToSave
+        }
+        
         try await PHPhotoLibrary.shared().performChanges {
-            PHAssetChangeRequest.creationRequestForAsset(from: image)
+            let creationRequest = PHAssetCreationRequest.forAsset()
+            creationRequest.addResource(with: .photo, data: imageData, options: nil)
         }
     }
     
     // MARK: - Save Dual Capture (Processed + RAW)
     
     /// Сохранить дуал-захват (обработанное фото + RAW)
-    func saveDualCapture(processedImage: UIImage?, rawData: Data?) async throws {
-        guard processedImage != nil || rawData != nil else {
+    func saveDualCapture(processedImage: UIImage?, processedData: Data?, rawData: Data?) async throws {
+        guard processedImage != nil || processedData != nil || rawData != nil else {
             throw PhotoLibraryError.noDataToSave
         }
         
         try await PHPhotoLibrary.shared().performChanges {
-            // Сохранить обработанное изображение
-            if let processedImage = processedImage {
-                PHAssetChangeRequest.creationRequestForAsset(from: processedImage)
+            let creationRequest = PHAssetCreationRequest.forAsset()
+            var hasPrimary = false
+            
+            if let processedData = processedData {
+                creationRequest.addResource(with: .photo, data: processedData, options: nil)
+                hasPrimary = true
+            } else if let processedImage = processedImage, let data = processedImage.pngData() {
+                creationRequest.addResource(with: .photo, data: data, options: nil)
+                hasPrimary = true
             }
             
-            // Сохранить RAW данные (если доступны)
             if let rawData = rawData {
-                let creationRequest = PHAssetCreationRequest.forAsset()
-                creationRequest.addResource(
-                    with: .photo,
-                    data: rawData,
-                    options: nil
-                )
+                let resourceType: PHAssetResourceType = hasPrimary ? .alternatePhoto : .photo
+                creationRequest.addResource(with: resourceType, data: rawData, options: nil)
             }
         }
     }

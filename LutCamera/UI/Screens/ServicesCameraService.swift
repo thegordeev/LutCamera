@@ -63,6 +63,14 @@ class CameraService: NSObject, ObservableObject {
             
             // Настройка photo output
             photoOutput.maxPhotoQualityPrioritization = .quality
+
+            if #available(iOS 16.0, *) {
+                if let maxDimensions = photoOutput.supportedPhotoDimensions.max(by: { lhs, rhs in
+                    lhs.width * lhs.height < rhs.width * rhs.height
+                }) {
+                    photoOutput.maxPhotoDimensions = maxDimensions
+                }
+            }
             
             // Включить ProRAW если доступно
             if photoOutput.availableRawPhotoPixelFormatTypes.count > 0 {
@@ -78,26 +86,22 @@ class CameraService: NSObject, ObservableObject {
     // MARK: - Session Control
     
     func startSession() {
-        Task {
-            guard !captureSession.isRunning else { return }
-            
-            captureSession.startRunning()
-            
-            await MainActor.run {
-                isSessionRunning = captureSession.isRunning
-            }
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            guard !self.captureSession.isRunning else { return }
+
+            self.captureSession.startRunning()
+            self.isSessionRunning = self.captureSession.isRunning
         }
     }
     
     func stopSession() {
-        Task {
-            guard captureSession.isRunning else { return }
-            
-            captureSession.stopRunning()
-            
-            await MainActor.run {
-                isSessionRunning = false
-            }
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            guard self.captureSession.isRunning else { return }
+
+            self.captureSession.stopRunning()
+            self.isSessionRunning = false
         }
     }
     
@@ -166,7 +170,10 @@ class CameraService: NSObject, ObservableObject {
            photoOutput.isAppleProRAWEnabled,
            let rawFormat = photoOutput.availableRawPhotoPixelFormatTypes.first {
             // Создать настройки с RAW форматом
-            settings = AVCapturePhotoSettings(rawPixelFormatType: rawFormat)
+            settings = AVCapturePhotoSettings(
+                rawPixelFormatType: rawFormat,
+                processedFormat: [AVVideoCodecKey: AVVideoCodecType.hevc]
+            )
         } else {
             // Создать обычные настройки
             settings = AVCapturePhotoSettings()
@@ -193,6 +200,11 @@ class CameraService: NSObject, ObservableObject {
 private class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
     
     private let completion: (PhotoCapture?) -> Void
+    private var processedImage: UIImage?
+    private var processedData: Data?
+    private var rawData: Data?
+    private var metadata: [String: Any]?
+    private var didComplete = false
     
     init(completion: @escaping (PhotoCapture?) -> Void) {
         self.completion = completion
@@ -209,21 +221,36 @@ private class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
             return
         }
         
-        // Получить обработанное изображение
-        guard let imageData = photo.fileDataRepresentation(),
-              let image = UIImage(data: imageData) else {
+        if photo.isRawPhoto {
+            rawData = photo.fileDataRepresentation()
+        } else {
+            processedData = photo.fileDataRepresentation()
+            if let processedData {
+                processedImage = UIImage(data: processedData)
+            }
+            metadata = photo.metadata
+        }
+    }
+    
+    func photoOutput(
+        _ output: AVCapturePhotoOutput,
+        didFinishCaptureFor resolvedSettings: AVCaptureResolvedPhotoSettings,
+        error: Error?
+    ) {
+        if let error = error {
+            print("Error capturing photo: \(error)")
             completion(nil)
             return
         }
         
-        // Получить RAW данные если доступны
-        let rawData = photo.fileDataRepresentation()
+        guard !didComplete else { return }
+        didComplete = true
         
-        // Создать модель захвата
         let photoCapture = PhotoCapture(
-            processedImage: image,
+            processedImage: processedImage,
+            processedData: processedData,
             rawData: rawData,
-            metadata: photo.metadata
+            metadata: metadata
         )
         
         completion(photoCapture)
