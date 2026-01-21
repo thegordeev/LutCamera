@@ -77,26 +77,28 @@ class CameraService: NSObject, ObservableObject {
     
     // MARK: - Session Control
     
-    func startSession() {
-        Task {
-            guard !captureSession.isRunning else { return }
+    nonisolated func startSession() {
+        Task.detached { [weak self] in
+            guard let self = self else { return }
+            guard !self.captureSession.isRunning else { return }
             
-            captureSession.startRunning()
+            self.captureSession.startRunning()
             
             await MainActor.run {
-                isSessionRunning = captureSession.isRunning
+                self.isSessionRunning = self.captureSession.isRunning
             }
         }
     }
     
-    func stopSession() {
-        Task {
-            guard captureSession.isRunning else { return }
+    nonisolated func stopSession() {
+        Task.detached { [weak self] in
+            guard let self = self else { return }
+            guard self.captureSession.isRunning else { return }
             
-            captureSession.stopRunning()
+            self.captureSession.stopRunning()
             
             await MainActor.run {
-                isSessionRunning = false
+                self.isSessionRunning = false
             }
         }
     }
