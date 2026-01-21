@@ -26,6 +26,8 @@ actor PhotoLibraryService {
             throw PhotoLibraryError.noDataToSave
         }
         
+        var placeholder: PHObjectPlaceholder?
+        
         try await PHPhotoLibrary.shared().performChanges {
             let creationRequest = PHAssetCreationRequest.forAsset()
             var hasPrimary = false
@@ -42,6 +44,17 @@ actor PhotoLibraryService {
                 let resourceType: PHAssetResourceType = hasPrimary ? .alternatePhoto : .photo
                 creationRequest.addResource(with: resourceType, data: rawData, options: nil)
             }
+            
+            placeholder = creationRequest.placeholderForCreatedAsset
+        }
+        
+        guard let localIdentifier = placeholder?.localIdentifier else {
+            throw PhotoLibraryError.saveFailed
+        }
+        
+        let fetchResult = PHAsset.fetchAssets(withLocalIdentifiers: [localIdentifier], options: nil)
+        if fetchResult.firstObject == nil {
+            throw PhotoLibraryError.saveFailed
         }
     }
     

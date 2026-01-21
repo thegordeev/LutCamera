@@ -18,7 +18,7 @@ class PermissionsManager: ObservableObject {
     
     func checkPermissions() {
         cameraAuthorizationStatus = AVCaptureDevice.authorizationStatus(for: .video)
-        photoLibraryAuthorizationStatus = PHPhotoLibrary.authorizationStatus(for: .addOnly)
+        photoLibraryAuthorizationStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
     }
     
     // MARK: - Request Camera Permission
@@ -52,7 +52,7 @@ class PermissionsManager: ObservableObject {
     // MARK: - Request Photo Library Permission
     
     func requestPhotoLibraryPermission() async -> Bool {
-        let status = PHPhotoLibrary.authorizationStatus(for: .addOnly)
+        let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
         
         switch status {
         case .authorized, .limited:
@@ -60,7 +60,7 @@ class PermissionsManager: ObservableObject {
             
         case .notDetermined:
             // Request permission
-            let newStatus = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+            let newStatus = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
             await MainActor.run {
                 self.photoLibraryAuthorizationStatus = newStatus
             }
