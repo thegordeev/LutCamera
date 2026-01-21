@@ -1,6 +1,7 @@
 import AVFoundation
 import Photos
 import SwiftUI
+import Combine
 
 /// Менеджер разрешений для камеры и галереи
 @MainActor

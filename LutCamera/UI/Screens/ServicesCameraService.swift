@@ -156,12 +156,17 @@ class CameraService: NSObject, ObservableObject {
     
     func capturePhoto(completion: @escaping (PhotoCapture?) -> Void) {
         // Настройка параметров захвата
-        let settings = AVCapturePhotoSettings()
+        let settings: AVCapturePhotoSettings
         
         // Включить ProRAW если доступно
         if photoOutput.availableRawPhotoPixelFormatTypes.count > 0,
-           photoOutput.isAppleProRAWEnabled {
-            settings.rawPhotoPixelFormatType = photoOutput.availableRawPhotoPixelFormatTypes.first
+           photoOutput.isAppleProRAWEnabled,
+           let rawFormat = photoOutput.availableRawPhotoPixelFormatTypes.first {
+            // Создать настройки с RAW форматом
+            settings = AVCapturePhotoSettings(rawPixelFormatType: rawFormat)
+        } else {
+            // Создать обычные настройки
+            settings = AVCapturePhotoSettings()
         }
         
         // Установить качество
