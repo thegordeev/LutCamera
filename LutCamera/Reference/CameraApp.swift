@@ -1,3 +1,4 @@
+#if DEBUG && REFERENCE_UI
 import SwiftUI
 import AVFoundation
 import Photos
@@ -462,3 +463,4 @@ struct ShutterButtonView: View {
 #Preview {
     CameraView()
 }
+#endif

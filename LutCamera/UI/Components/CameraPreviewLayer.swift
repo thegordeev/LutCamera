@@ -3,7 +3,7 @@ import SwiftUI
 
 struct CameraPreviewLayer: UIViewRepresentable {
     let previewLayer: AVCaptureVideoPreviewLayer
-    var showDevBorder: Bool = true
+    var showDevBorder: Bool = false
 
     func makeUIView(context: Context) -> PreviewView {
         let view = PreviewView()
