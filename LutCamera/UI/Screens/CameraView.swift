@@ -6,35 +6,49 @@ struct CameraView: View {
     @State private var lastPhoto: UIImage?
 
     var body: some View {
-        GeometryReader { _ in
+        GeometryReader { geo in
             VStack(spacing: 0) {
                 CameraTopSafeArea()
 
-                ZStack(alignment: .bottom) {
+                // Preview container: 9:16 (portrait) frame, full-width, centered, with top offset
+                let previewWidth = geo.size.width
+                let previewHeight = previewWidth * (16.0 / 9.0)
+
+                ZStack {
+                    // Camera preview (background)
                     CameraPreviewLayer(previewLayer: viewModel.previewLayer)
                         .cornerRadius(AppTheme.Layout.cornerRadius)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .frame(width: previewWidth, height: previewHeight)
 
-                    ZoomControls(
-                        currentZoomLevel: Binding(
-                            get: { viewModel.currentZoomLevel },
-                            set: { viewModel.currentZoomLevel = $0 }
+                    // Overlays
+                    VStack(spacing: 0) {
+                        Spacer()
+
+                        ZoomControls(
+                            currentZoomLevel: Binding(
+                                get: { viewModel.currentZoomLevel },
+                                set: { viewModel.currentZoomLevel = $0 }
+                            )
                         )
-                    )
-                    .padding(.bottom, 20)
-                }
+                        .padding(.bottom, 12)
 
-                BottomControlPanel(
-                    lastPhoto: lastPhoto,
-                    onCapture: viewModel.capturePhoto,
-                    onFlipCamera: viewModel.switchCamera,
-                    onGallery: {
-                        // Логика открытия галереи (пока заглушка)
-                        if let url = URL(string: "photos-redirect://") {
-                            UIApplication.shared.open(url)
-                        }
+                        BottomControlPanel(
+                            lastPhoto: lastPhoto,
+                            onCapture: viewModel.capturePhoto,
+                            onFlipCamera: viewModel.switchCamera,
+                            onGallery: {
+                                // Логика открытия галереи (пока заглушка)
+                                if let url = URL(string: "photos-redirect://") {
+                                    UIApplication.shared.open(url)
+                                }
+                            }
+                        )
                     }
-                )
+                    .frame(width: previewWidth, height: previewHeight)
+                }
+                .frame(width: previewWidth, height: previewHeight)
+                .padding(.top, 64)
+                .frame(maxWidth: .infinity, alignment: .center)
             }
             .background(Color.black)
             .edgesIgnoringSafeArea(.all)
