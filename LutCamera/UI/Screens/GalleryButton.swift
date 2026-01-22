@@ -7,33 +7,20 @@ struct GalleryButton: View {
     
     var body: some View {
         Button(action: action) {
-            ZStack {
-                if let lastPhoto = lastPhoto {
-                    // Показать последнее фото
-                    Image(uiImage: lastPhoto)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: 45, height: 45)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                        )
-                } else {
-                    // Placeholder если нет фото
-                    Circle()
-                        .fill(Color.gray.opacity(0.3))
-                        .frame(width: 45, height: 45)
-                        .overlay(
-                            Image(systemName: "photo")
-                                .foregroundColor(.white)
-                                .font(.system(size: 20))
-                        )
-                        .overlay(
-                            Circle()
-                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                        )
-                }
+            if let lastPhoto = lastPhoto {
+                Image(uiImage: lastPhoto)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 48, height: 48)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(Color.white, lineWidth: 2)
+                    )
+            } else {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color.gray.opacity(0.3))
+                    .frame(width: 48, height: 48)
             }
         }
     }

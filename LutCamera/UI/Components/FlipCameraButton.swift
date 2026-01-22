@@ -5,10 +5,14 @@ struct FlipCameraButton: View {
     
     var body: some View {
         Button(action: action) {
-            Image(systemName: "arrow.triangle.2.circlepath")
-                .foregroundColor(.white)
-                .font(.system(size: 24))
-                .frame(width: 45, height: 45)
+            ZStack {
+                Circle()
+                    .fill(Color.white.opacity(0.15))
+                    .frame(width: 48, height: 48)
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(.system(size: 22, weight: .light))
+                    .foregroundColor(.white)
+            }
         }
     }
 }
