@@ -1,65 +1,78 @@
 import SwiftUI
 import UIKit
+import AVFoundation
 
 struct CameraView: View {
     @State private var viewModel = CameraViewModel()
     @State private var lastPhoto: UIImage?
 
+    // UI State (для полного соответствия референсу)
+    @State private var mode: CameraMode = .photo
+    @State private var isRecording = false
+    @State private var recordedDuration: TimeInterval = 0
+    @State private var flashMode: AVCaptureDevice.FlashMode = .off
+    @State private var showShutterFlash = false
+
     var body: some View {
         GeometryReader { geo in
-            VStack(spacing: 0) {
-                CameraTopSafeArea()
+            ZStack {
+                Color.black.ignoresSafeArea()
 
-                // Preview container: 9:16 (portrait) frame, full-width, centered, with top offset
-                let previewWidth = geo.size.width
-                let previewHeight = previewWidth * (16.0 / 9.0)
+                // Camera Preview
+                CameraPreviewLayer(previewLayer: viewModel.previewLayer)
+                    .ignoresSafeArea()
 
-                ZStack {
-                    // Camera preview (background)
-                    CameraPreviewLayer(previewLayer: viewModel.previewLayer)
-                        .cornerRadius(AppTheme.Layout.cornerRadius)
-                        .frame(width: previewWidth, height: previewHeight)
+                // UI Overlay
+                VStack(spacing: 0) {
 
-                    // Overlays
-                    VStack(spacing: 0) {
-                        Spacer()
+                    // Top Controls
+                    TopControls(
+                        isRecording: isRecording,
+                        recordedDuration: recordedDuration,
+                        flashMode: flashMode,
+                        onFlashToggle: toggleFlash,
+                        onMenuTap: { /* Menu action */ },
+                        onLivePhotoTap: { /* Live photo toggle */ }
+                    )
 
+                    Spacer()
+
+                    // Zoom Controls (скрыты при записи видео)
+                    if !isRecording {
                         ZoomControls(
                             currentZoomLevel: Binding(
                                 get: { viewModel.currentZoomLevel },
                                 set: { viewModel.currentZoomLevel = $0 }
                             )
                         )
-                        .padding(.bottom, 12)
-
-                        BottomControlPanel(
-                            lastPhoto: lastPhoto,
-                            onCapture: viewModel.capturePhoto,
-                            onFlipCamera: viewModel.switchCamera,
-                            onGallery: {
-                                // Логика открытия галереи (пока заглушка)
-                                if let url = URL(string: "photos-redirect://") {
-                                    UIApplication.shared.open(url)
-                                }
-                            }
-                        )
+                        .padding(.bottom, AppTheme.Layout.zoomBottomPadding)
                     }
-                    .frame(width: previewWidth, height: previewHeight)
+
+                    // Bottom Bar
+                    BottomControlPanel(
+                        mode: mode,
+                        isRecording: isRecording,
+                        lastPhoto: lastPhoto,
+                        onModeChange: { newMode in
+                            withAnimation { mode = newMode }
+                        },
+                        onCapture: handleCapture,
+                        onFlipCamera: viewModel.switchCamera,
+                        onGallery: openGallery
+                    )
                 }
-                .frame(width: previewWidth, height: previewHeight)
-                .padding(.top, 64)
-                .frame(maxWidth: .infinity, alignment: .center)
+
+                // Shutter flash animation (для фото)
+                if showShutterFlash && mode == .photo {
+                    Color.black.opacity(0.8).ignoresSafeArea()
+                }
             }
-            .background(Color.black)
-            .edgesIgnoringSafeArea(.all)
         }
-        // 👇 ДОБАВЛЕНО: Отображение ошибок
         .alert("Ошибка", isPresented: $viewModel.showError) {
             Button("OK", role: .cancel) { }
         } message: {
             Text(viewModel.errorMessage)
         }
-        // 👆 КОНЕЦ ДОБАВЛЕНИЯ
         .task {
             await viewModel.onAppear()
             lastPhoto = await viewModel.fetchLastPhoto()
@@ -69,11 +82,57 @@ struct CameraView: View {
         }
         .onChange(of: viewModel.lastCapturedPhoto?.id) { _, _ in
             if let newImage = viewModel.lastCapturedPhoto?.processedImage {
-                // Анимация обновления миниатюры
                 withAnimation(.easeInOut(duration: 0.2)) {
                     lastPhoto = newImage
                 }
             }
+        }
+    }
+
+    // MARK: - Actions
+
+    private func handleCapture() {
+        if mode == .photo {
+            // Фото режим
+            viewModel.capturePhoto()
+
+            // Анимация вспышки
+            withAnimation(.linear(duration: 0.1)) {
+                showShutterFlash = true
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                withAnimation {
+                    showShutterFlash = false
+                }
+            }
+        } else {
+            // Видео режим
+            if isRecording {
+                stopRecording()
+            } else {
+                startRecording()
+            }
+        }
+    }
+
+    private func startRecording() {
+        isRecording = true
+        recordedDuration = 0
+        // TODO: Implement actual video recording via CameraService
+    }
+
+    private func stopRecording() {
+        isRecording = false
+        // TODO: Implement actual video recording stop
+    }
+
+    private func toggleFlash() {
+        flashMode = (flashMode == .off) ? .on : .off
+    }
+
+    private func openGallery() {
+        if let url = URL(string: "photos-redirect://") {
+            UIApplication.shared.open(url)
         }
     }
 }
