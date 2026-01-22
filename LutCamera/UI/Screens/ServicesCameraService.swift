@@ -1,10 +1,26 @@
 import AVFoundation
 import UIKit
 import Combine
+import CoreMedia
 
 /// Сервис для работы с камерой
 @MainActor
 class CameraService: NSObject, ObservableObject {
+    
+    // Ошибки камеры
+    enum CameraError: Error, LocalizedError {
+        case noCameraAvailable
+        case cannotAddInput
+        case cannotAddOutput
+        
+        var errorDescription: String? {
+            switch self {
+            case .noCameraAvailable: return "Камера недоступна"
+            case .cannotAddInput: return "Не удалось добавить вход камеры"
+            case .cannotAddOutput: return "Не удалось добавить выход фото"
+            }
+        }
+    }
     
     @Published var isSessionRunning = false
     @Published var capturedPhoto: PhotoCapture?
@@ -28,20 +44,17 @@ class CameraService: NSObject, ObservableObject {
     
     func setupSession() async throws {
         captureSession.beginConfiguration()
-        captureSession.sessionPreset = .photo // Важно для качества
+        captureSession.sessionPreset = .photo
         
         guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
             throw CameraError.noCameraAvailable
         }
         currentCamera = camera
         
-        // Настройка автофокуса и экспозиции
+        // Автофокус
         try? camera.lockForConfiguration()
         if camera.isFocusModeSupported(.continuousAutoFocus) {
             camera.focusMode = .continuousAutoFocus
-        }
-        if camera.isExposureModeSupported(.continuousAutoExposure) {
-            camera.exposureMode = .continuousAutoExposure
         }
         camera.unlockForConfiguration()
         
@@ -53,8 +66,19 @@ class CameraService: NSObject, ObservableObject {
         guard captureSession.canAddOutput(photoOutput) else { throw CameraError.cannotAddOutput }
         captureSession.addOutput(photoOutput)
         
-        // Максимальное качество
+        // ВАЖНО: Включаем возможность съемки в 48 МП на уровне Output
         photoOutput.maxPhotoQualityPrioritization = .quality
+        
+        if #available(iOS 16.0, *) {
+            // Ищем самое большое поддерживаемое разрешение в формате камеры
+            if let maxDimension = camera.activeFormat.supportedMaxPhotoDimensions.max(by: { $0.width * $0.height < $1.width * $1.height }) {
+                // Говорим Output'у, что мы готовы принимать такие большие фото
+                photoOutput.maxPhotoDimensions = maxDimension
+            }
+        } else {
+            // Старый способ для iOS 15 и ниже
+            photoOutput.isHighResolutionCaptureEnabled = true
+        }
         
         captureSession.commitConfiguration()
     }
@@ -99,6 +123,14 @@ class CameraService: NSObject, ObservableObject {
         captureSession.addInput(newInput)
         videoDeviceInput = newInput
         currentCamera = newCamera
+        
+        // При смене камеры нужно заново настроить Output для 48 МП
+        if #available(iOS 16.0, *) {
+            if let maxDimension = newCamera.activeFormat.supportedMaxPhotoDimensions.max(by: { $0.width * $0.height < $1.width * $1.height }) {
+                photoOutput.maxPhotoDimensions = maxDimension
+            }
+        }
+        
         captureSession.commitConfiguration()
     }
     
@@ -107,7 +139,18 @@ class CameraService: NSObject, ObservableObject {
     func capturePhoto(completion: @escaping (PhotoCapture?) -> Void) {
         let settings = AVCapturePhotoSettings()
         settings.flashMode = .auto
-        settings.photoQualityPrioritization = .quality // Включаем алгоритмы Apple
+        settings.photoQualityPrioritization = .quality
+        
+        // ЛОГИКА ДЛЯ 48MP (iOS 16+)
+        // Указываем в настройках конкретного кадра, что хотим макс разрешение
+        if #available(iOS 16.0, *) {
+            if let camera = currentCamera,
+               let maxDimension = camera.activeFormat.supportedMaxPhotoDimensions.max(by: { $0.width * $0.height < $1.width * $1.height }) {
+                settings.maxPhotoDimensions = maxDimension
+            }
+        } else {
+            settings.isHighResolutionPhotoEnabled = true
+        }
         
         let delegate = PhotoCaptureDelegate(completion: completion)
         self.photoCaptureDelegate = delegate
@@ -134,22 +177,13 @@ private class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
             return
         }
         
-        // САМОЕ ГЛАВНОЕ: Берем оригинальные данные, а не UIImage.
-        // В этих данных лежат EXIF, GPS (если разрешено), Smart HDR и т.д.
+        // Получаем "сырой" файл с данными (где есть 48MP и метаданные)
         guard let data = photo.fileDataRepresentation() else {
             completion(nil)
             return
         }
         
-        // Создаем UIImage только для превью в приложении
         let image = UIImage(data: data)
-        
         completion(PhotoCapture(processedImage: image, processedData: data, rawData: nil))
     }
-}
-
-enum CameraError: Error {
-    case noCameraAvailable
-    case cannotAddInput
-    case cannotAddOutput
 }

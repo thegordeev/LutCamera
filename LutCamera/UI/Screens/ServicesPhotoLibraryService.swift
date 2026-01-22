@@ -3,18 +3,15 @@ import UIKit
 
 actor PhotoLibraryService {
     
-    // MARK: - Save High Quality Data
-    
+    // Сохраняем оригинальные данные байт-в-байт
+    // Это критично для сохранения 48МП, GPS и инфо о линзе
     func saveOriginalData(_ data: Data) async throws {
         try await PHPhotoLibrary.shared().performChanges {
             let request = PHAssetCreationRequest.forAsset()
-            // Сохраняем оригинальный файл байт-в-байт.
-            // .photo говорит системе, что это стандартное фото (HEIC/JPEG)
+            // .photo автоматически определит формат (HEIC/JPEG) внутри Data
             request.addResource(with: .photo, data: data, options: nil)
         }
     }
-    
-    // MARK: - Fetch Last Photo
     
     func fetchLastPhoto() async -> UIImage? {
         let fetchOptions = PHFetchOptions()
@@ -40,6 +37,18 @@ actor PhotoLibraryService {
             ) { image, _ in
                 continuation.resume(returning: image)
             }
+        }
+    }
+}
+
+enum PhotoLibraryError: Error, LocalizedError {
+    case saveFailed
+    case fetchFailed
+    
+    var errorDescription: String? {
+        switch self {
+        case .saveFailed: return "Не удалось сохранить фото"
+        case .fetchFailed: return "Не удалось загрузить фото"
         }
     }
 }

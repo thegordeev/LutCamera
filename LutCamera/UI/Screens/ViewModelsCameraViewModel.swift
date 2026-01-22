@@ -72,15 +72,14 @@ class CameraViewModel {
                 guard let self = self else { return }
                 self.isCaptureInProgress = false
                 
-                // Проверяем наличие ДАННЫХ, а не просто картинки
+                // Проверяем наличие данных
                 guard let photo = photo, let data = photo.processedData else {
-                    self.showError(message: "Ошибка: нет данных фото")
-                    return
+                    self.showError(message: "Ошибка: пустые данные")
+                    return // <--- ВОТ ЗДЕСЬ БЫЛ ПРОПУЩЕН RETURN
                 }
                 
                 self.lastCapturedPhoto = photo
-                
-                // Сохраняем оригинальные данные
+                // Сохраняем оригинал (Data), чтобы сохранить 48MP и метаданные
                 await self.saveToLibrary(data)
             }
         }
@@ -97,7 +96,7 @@ class CameraViewModel {
         
         do {
             try await photoLibraryService.saveOriginalData(data)
-            print("✅ Сохранено в высоком качестве!")
+            print("✅ Сохранено в высоком качестве (48MP)!")
         } catch {
             showError(message: "Ошибка сохранения: \(error.localizedDescription)")
         }
