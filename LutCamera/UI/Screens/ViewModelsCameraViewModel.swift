@@ -10,9 +10,12 @@ class CameraViewModel {
     private let photoLibraryService = PhotoLibraryService()
     private let permissionsManager = PermissionsManager()
     
-    var currentZoomLevel: Double = 1.0 {
-        didSet { cameraService.setZoom(CGFloat(currentZoomLevel)) }
-    }
+    // MARK: - Lens State
+    
+    var selectedLens: LensPreset = .wide
+    var availableLenses: [LensPreset] { cameraService.availableLenses }
+    
+    // MARK: - Session State
     
     var isSessionRunning = false
     var lastCapturedPhoto: PhotoCapture?
@@ -23,6 +26,8 @@ class CameraViewModel {
     
     var previewLayer: AVCaptureVideoPreviewLayer { cameraService.previewLayer }
     
+    // MARK: - Lifecycle
+    
     func onAppear() async {
         await requestPermissions()
         
@@ -31,6 +36,7 @@ class CameraViewModel {
                 try await cameraService.setupSession()
                 cameraService.startSession()
                 isSessionRunning = true
+                selectedLens = cameraService.currentLens
             } catch {
                 showError(message: "Ошибка камеры: \(error.localizedDescription)")
             }
@@ -47,18 +53,34 @@ class CameraViewModel {
         let _ = await permissionsManager.requestCameraPermission()
         let _ = await permissionsManager.requestPhotoLibraryPermission()
     }
+
+    // MARK: - Lens Switching
     
-    func setZoom(_ level: Double) { currentZoomLevel = level }
+    /// Переключает линзу камеры
+    func switchLens(to lens: LensPreset) {
+        Task {
+            do {
+                try await cameraService.switchLens(to: lens)
+                selectedLens = lens
+            } catch {
+                showError(message: "Не удалось переключить линзу: \(error.localizedDescription)")
+            }
+        }
+    }
     
+    /// Переключает между фронтальной и задней камерой
     func switchCamera() {
         Task {
             do {
                 try await cameraService.switchCamera()
+                selectedLens = cameraService.currentLens
             } catch {
                 showError(message: "Не удалось переключить камеру")
             }
         }
     }
+    
+    // MARK: - Photo Capture
     
     func capturePhoto() {
         guard !isCaptureInProgress else { return }
@@ -72,14 +94,12 @@ class CameraViewModel {
                 guard let self = self else { return }
                 self.isCaptureInProgress = false
                 
-                // Проверяем наличие данных
                 guard let photo = photo, let data = photo.processedData else {
                     self.showError(message: "Ошибка: пустые данные")
-                    return // <--- ВОТ ЗДЕСЬ БЫЛ ПРОПУЩЕН RETURN
+                    return
                 }
                 
                 self.lastCapturedPhoto = photo
-                // Сохраняем оригинал (Data), чтобы сохранить 48MP и метаданные
                 await self.saveToLibrary(data)
             }
         }
@@ -96,7 +116,7 @@ class CameraViewModel {
         
         do {
             try await photoLibraryService.saveOriginalData(data)
-            print("✅ Сохранено в высоком качестве (48MP)!")
+            print("✅ Сохранено в высоком качестве!")
         } catch {
             showError(message: "Ошибка сохранения: \(error.localizedDescription)")
         }

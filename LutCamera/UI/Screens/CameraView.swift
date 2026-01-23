@@ -15,11 +15,16 @@ struct CameraView: View {
                         .cornerRadius(AppTheme.Layout.cornerRadius)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
 
+                    // Обновлённые контролы линз (0.5x / 1x / 3x)
                     ZoomControls(
-                        currentZoomLevel: Binding(
-                            get: { viewModel.currentZoomLevel },
-                            set: { viewModel.currentZoomLevel = $0 }
-                        )
+                        selectedLens: Binding(
+                            get: { viewModel.selectedLens },
+                            set: { _ in }
+                        ),
+                        availableLenses: viewModel.availableLenses,
+                        onLensSelected: { lens in
+                            viewModel.switchLens(to: lens)
+                        }
                     )
                     .padding(.bottom, 20)
                 }
@@ -29,7 +34,6 @@ struct CameraView: View {
                     onCapture: viewModel.capturePhoto,
                     onFlipCamera: viewModel.switchCamera,
                     onGallery: {
-                        // Логика открытия галереи (пока заглушка)
                         if let url = URL(string: "photos-redirect://") {
                             UIApplication.shared.open(url)
                         }
@@ -39,13 +43,11 @@ struct CameraView: View {
             .background(Color.black)
             .edgesIgnoringSafeArea(.all)
         }
-        // 👇 ДОБАВЛЕНО: Отображение ошибок
         .alert("Ошибка", isPresented: $viewModel.showError) {
             Button("OK", role: .cancel) { }
         } message: {
             Text(viewModel.errorMessage)
         }
-        // 👆 КОНЕЦ ДОБАВЛЕНИЯ
         .task {
             await viewModel.onAppear()
             lastPhoto = await viewModel.fetchLastPhoto()
@@ -55,7 +57,6 @@ struct CameraView: View {
         }
         .onChange(of: viewModel.lastCapturedPhoto?.id) { _, _ in
             if let newImage = viewModel.lastCapturedPhoto?.processedImage {
-                // Анимация обновления миниатюры
                 withAnimation(.easeInOut(duration: 0.2)) {
                     lastPhoto = newImage
                 }
